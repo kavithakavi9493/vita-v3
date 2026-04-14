@@ -1,0 +1,50 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ────────────────────────────────────
+    function isAuth() { return request.auth != null; }
+    function isOwner(uid) { return request.auth.uid == uid; }
+    function isValidScore(score) { return score is int && score >= 0 && score <= 100; }
+
+    // ── Users ────────────────────────────────────────────────
+    match /users/{uid} {
+      allow read:   if isAuth() && isOwner(uid);
+      allow create: if isAuth() && isOwner(uid);
+      allow update: if isAuth() && isOwner(uid);
+      allow delete: if false; // delete via admin only
+    }
+
+    // ── Quiz Results ─────────────────────────────────────────
+    match /quizResults/{uid} {
+      allow read:   if isAuth() && isOwner(uid);
+      allow write:  if isAuth() && isOwner(uid)
+                       && isValidScore(request.resource.data.vitaScore);
+    }
+
+    // ── Orders ───────────────────────────────────────────────
+    match /orders/{orderId} {
+      allow read:   if isAuth() && resource.data.userId == request.auth.uid;
+      allow create: if isAuth() && request.resource.data.userId == request.auth.uid
+                       && request.resource.data.amount > 0;
+      allow update: if false; // update only via backend/admin
+      allow delete: if false;
+    }
+
+    // ── Payments ─────────────────────────────────────────────
+    match /payments/{paymentId} {
+      allow read:   if isAuth() && resource.data.userId == request.auth.uid;
+      allow write:  if false; // write only via backend
+    }
+
+    // ── Progress check-ins ───────────────────────────────────
+    match /checkins/{uid}/daily/{date} {
+      allow read, write: if isAuth() && isOwner(uid);
+    }
+
+    // Block everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
